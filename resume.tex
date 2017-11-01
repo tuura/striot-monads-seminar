@@ -31,14 +31,9 @@
 
 \institute[]{%
 Newcastle University \texorpdfstring{\\}{ }
-Tuura\texorpdfstring{\\}{ }
+School of Engineering\texorpdfstring{\\}{ }
+Tuura (https://github.com/tuura)\texorpdfstring{\\}{ }
 }
-
-% рисунок на титуле
-% \titlegraphic{%
-% % \vspace{-1.3cm}\imgw{4cm}{stannes.jpg} \hfill %
-% %\vspace{-1.3cm}\imgw{3.6cm}{sheldonian.jpg}%
-% }
 
 \begin{document}
 
@@ -79,19 +74,53 @@ plutIO x y = do
 
 \section{Haskell and effects}
 
-\begin{frame}[fragile]{Functor and Monad}
-  \begin{block}{Effectful function in an impure language}
+\begin{frame}[fragile]{Functor}
+  \begin{block}{Functor type class}
   \begin{minted}{csharp}
-class  Functor f  where
+class Functor f where
     fmap :: (a -> b) -> f a -> f b
   \end{minted}
   \end{block}
-  \begin{block}{Pure Haskell function}
+  \pause
+  \begin{block}{Input a number}
+  \begin{minted}{haskell}
+getInt :: IO Int
+getInt = fmap read getLine
+  \end{minted}
+  \end{block}
+  \pause
+  \begin{block}{}
+  \begin{minted}{haskell}
+ghci> 42
+42
+  \end{minted}
+  \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Monad}
+  \begin{block}{Monad type class}
   \begin{minted}{haskell}
 class Functor m => Monad m where
     (>>=)  :: m a -> (a -> m b) -> m b
     (>>)   :: m a -> m b -> m b
     return :: a -> m a
+  \end{minted}
+  \end{block}
+  \pause
+  \begin{block}{Input two numbers and form a pair}
+  \begin{minted}{haskell}
+getTwoInts :: IO (Int, Int)
+getTwoInts = do x <- getInt
+                y <- getInt
+                return (x, y)
+  \end{minted}
+  \end{block}
+  \pause
+  \begin{block}{}
+  \begin{minted}{haskell}
+ghci> 1
+ghci> 2
+(1,2)
   \end{minted}
   \end{block}
 \end{frame}
@@ -103,7 +132,7 @@ main :: IO ()
 main = do
   putStrLn "What is your name?"
   putStrLn "|> "
-  name <- readLine
+  name <- getLine
   putStrLn $ "Hello, " ++ name ++ "!"
   \end{minted}
   \end{block}
@@ -115,12 +144,18 @@ main = do
 class Monad m => MonadReader r m | m -> r where
     -- | Retrieves the monad environment.
     ask   :: m r
-
     -- | Executes a computation in a modified environment.
     local :: (r -> r) -> m a -> m a
-
     -- | Retrieves a function of the current environment.
     reader :: (r -> a) -> m a
+  \end{minted}
+  \end{block}
+  \pause
+  \begin{block}{Read the environment and return it}
+  \begin{minted}{haskell}
+readerExample :: (MonadReader Int m) => m Int
+readerExample = do x <- ask
+                   return x
   \end{minted}
   \end{block}
 \end{frame}
@@ -130,21 +165,25 @@ class Monad m => MonadReader r m | m -> r where
   \begin{minted}{haskell}
 class (Monad m) => MonadRandom m where
   getRandomR :: (Random a) => (a, a) -> m a
-
   getRandom :: (Random a) => m a
-
   getRandomRs :: (Random a) => (a, a) -> m [a]
-
   getRandoms :: (Random a) => m [a]
+  \end{minted}
+  \end{block}
+  \pause
+  \begin{block}{Get two random numbers}
+  \begin{minted}{haskell}
+randomPair :: (MonadRandom m) => m (Int, Int)
+randomPair = do x <- getRandom
+                y <- getRandom
+                return (x, y)
   \end{minted}
   \end{block}
 \end{frame}
 
 \section{Programming with controlled effects}
 
-
-
-\begin{frame}[fragile]{Zombie apocalypses}
+\begin{frame}[fragile]{Zombie apocalypse}
   \begin{figure}
     \centering
     \def\svgwidth{\columnwidth}
@@ -176,21 +215,53 @@ type Schedule = (Shift, Shift, Shift)
   \end{block}
 \end{frame}
 
-\begin{frame}[fragile]{Shuffling shifts}
+\begin{frame}[fragile]{Possible shifts for the Group (no randomness)}
   \begin{block}{}
   \begin{minted}{haskell}
--- | An infinite stream of random possible shifts
-shifts :: (MonadReader Group m, MonadRandom m) =>
-          m [Shift]
-shifts = concat . repeat <$> step
-  where
-    step = do
-      people <- ask
-      possibleShifts <- shuffleM $ pairs people
-      pure possibleShifts
+possibleShifts :: (MonadReader Group m) => m [Shift]
+possibleShifts = do
+    people <- ask         -- people :: Group
+    return (pairs people)
+  \end{minted}
+  \end{block}
+\end{frame}
 
-      pairs :: [a] -> [(a, a)]
-      pairs l = [(x,y) | (x:ys) <- tails l, y <- ys]
+\begin{frame}[fragile]{Possible randomised shifts for the Group}
+  \begin{block}{}
+  \begin{minted}{haskell}
+randomisedShifts :: ( MonadReader Group m
+                    , MonadRandom m) => m [Shift]
+randomisedShifts = do
+    shifts <- possibleShifts
+    randomised <- shuffleM shifts
+    return randomised
+  \end{minted}
+  \end{block}
+  \pause
+  \begin{block}{Shuffling function: the source of randomness}
+  \begin{minted}{haskell}
+shuffleM :: MonadRandom m => [a] -> m [a]
+  \end{minted}
+  \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Infinite stream of randomised shifts}
+  \begin{block}{}
+  \begin{minted}{haskell}
+shifts :: ( MonadReader Group m
+          , MonadRandom m) => m [Shift]
+shifts = fmap (concat . repeat) randomisedShifts
+  \end{minted}
+  \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Infinite stream of randomised shifts (cryptic)}
+  \begin{block}{}
+  \begin{minted}{haskell}
+shifts :: ( MonadReader Group m
+          , MonadRandom m) => m [Shift]
+shifts = fmap (concat . repeat) step
+    where step = fmap pairs ask >>= shuffleM
   \end{minted}
   \end{block}
 \end{frame}
@@ -199,11 +270,11 @@ shifts = concat . repeat <$> step
   \begin{block}{}
   \begin{minted}{haskell}
 -- | Construct a randomised schedule
-buildSchedule :: (MonadReader Group m, MonadRandom m) =>
-  m Schedule
+buildSchedule :: ( MonadReader Group m
+                 , MonadRandom m) => m Schedule
 buildSchedule = do
-    [x, y, z] <- take 3 <$> shifts
-    pure $ (x, y, z)
+    [x, y, z] <- fmap (take 3) shifts
+    return (x, y, z)
   \end{minted}
   \end{block}
 \end{frame}
@@ -250,7 +321,7 @@ vector<Shift> shifts (const Group & people) {
   \end{block}
 \end{frame}
 
-\begin{frame}[fragile]{Explicately treading the parameter}
+\begin{frame}[fragile]{Explicatively treading the parameter}
   \begin{block}{}
   \begin{minted}{cpp}
 Schedule buildSchedule (const Group & people) {
@@ -264,8 +335,8 @@ Schedule buildSchedule (const Group & people) {
 \begin{frame}[fragile]{Summary}
   \begin{itemize}
     \item Track effects in types.
-    \item Implicitly execute service code.
-    \item Use \mintinline{haskell}{do}-notation to build "imperative"~DSLs.
+    \item Execute pure functions in an effectful context.
+    \item Use \mintinline{haskell}{do}-notation to build ``imperative'' DSLs.
   \end{itemize}
 \end{frame}
 
@@ -273,7 +344,7 @@ Schedule buildSchedule (const Group & people) {
 
 \begin{itemize}
   \item Monadic Parser Combinators // \textit{Graham Hutton}, \textit{Erik Meijer} – Department of Computer Science, University of Nottingham, 1996
-  \item These slides and code \url{https://github.com/geo2a/striot-monads}
+  \item These slides and code \url{https://github.com/tuura/striot-monads-seminar}
 \end{itemize}
 
 \end{frame}
